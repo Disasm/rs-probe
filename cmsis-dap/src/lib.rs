@@ -5,6 +5,7 @@ extern crate derive_try_from_primitive;
 
 use core::num::NonZeroUsize;
 use core::ops::Deref;
+use core::convert::TryInto;
 
 #[repr(u8)]
 #[allow(non_camel_case_types)]
@@ -181,6 +182,24 @@ impl DapCommand<'_> {
     pub fn command(&self) -> Command {
         self.command
     }
+
+    pub fn read_byte(&mut self) -> u8 {
+        let value = self.payload[0];
+        self.payload = &self.payload[1..];
+        value
+    }
+
+    pub fn read_short(&mut self) -> u16 {
+        let value = u16::from_le_bytes(self.payload[..2].try_into().unwrap());
+        self.payload = &self.payload[2..];
+        value
+    }
+
+    pub fn read_word(&mut self) -> u32 {
+        let value = u32::from_le_bytes(self.payload[..4].try_into().unwrap());
+        self.payload = &self.payload[4..];
+        value
+    }
 }
 
 impl Deref for DapCommand<'_> {
@@ -209,6 +228,26 @@ impl DapResponse<'_> {
     pub fn reject(&mut self) {
         self.buffer[0] = Command::DAP_Invalid as u8;
         self.payload_len = 0;
+    }
+
+    #[inline(always)]
+    fn buf(&mut self) -> &mut [u8] {
+        &mut self.buffer[1 + self.payload_len..]
+    }
+
+    pub fn write_byte(&mut self, value: u8) {
+        self.buf()[0] = value;
+        self.payload_len += 1;
+    }
+
+    pub fn write_short(&mut self, value: u16) {
+        self.buf()[..2].copy_from_slice(&value.to_le_bytes());
+        self.payload_len += 2;
+    }
+
+    pub fn write_word(&mut self, value: u32) {
+        self.buf()[..4].copy_from_slice(&value.to_le_bytes());
+        self.payload_len += 4;
     }
 }
 
