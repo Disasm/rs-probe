@@ -212,6 +212,13 @@ impl DapResponse<'_> {
     }
 }
 
+impl Deref for DapResponse<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.buffer[..self.payload_len+1]
+    }
+}
 
 
 // fn process_command(buf: &[u8]) {
