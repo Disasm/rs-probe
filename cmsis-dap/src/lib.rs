@@ -75,7 +75,11 @@ pub enum Command {
     /// Abort current Transfer.
     DAP_TransferAbort   = 0x07,
 
-    // TODO: Atomic Commands
+    // Atomic Commands
+    /// Execute multiple DAP commands from a single packet.
+    DAP_ExecuteCommands = 0x7F,
+    /// Queue multiple DAP commands provided in a multiple packets.
+    DAP_QueueCommands   = 0x7E,
 
     // DAP Vendor Command IDs
     DAP_VendorFirst     = 0x80,
@@ -224,6 +228,24 @@ pub fn request_length(command: Command, request: &[u8]) -> Option<NonZeroUsize> 
             }
         },
         DAP_TransferAbort => 1,
+
+        DAP_ExecuteCommands | DAP_QueueCommands => {
+            if request.len() >= 2 {
+                let num_cmd = request[1] as usize;
+                let mut offset = 2;
+                for _ in 0..num_cmd {
+                    if offset >= request.len() {
+                        return None;
+                    }
+                    let command = Command::try_from(request[offset])?;
+                    let len = request_length(command, &request[offset..])?;
+                    offset += len.get();
+                }
+                offset
+            } else {
+                return None;
+            }
+        }
 
         _ => return None,
     };
