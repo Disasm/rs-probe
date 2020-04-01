@@ -14,7 +14,7 @@ use stm32f1xx_hal::{prelude::*, stm32, stm32::{interrupt, Interrupt}};
 use stm32f1xx_hal::gpio::{Output, PushPull, gpioc::PC13};
 use usb_device::prelude::*;
 use crate::cmsis_dap_class::CmsisDapV1;
-use cmsis_dap::{DapCommand, Command, DapResponse};
+use cmsis_dap::{DapCommand, Command, DapResponse, ResponseStatus};
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
@@ -106,13 +106,39 @@ impl From<UsbError> for DapError {
     }
 }
 
+pub trait DapImplementation {
+    fn pin_io(&mut self, output_select: u8, output: u8, pin_wait_us: u32) -> u8;
 
-struct DapEngine<'a> {
-    usb: DapUsbDevice<'a, UsbBusType, UsbWaker>,
+    fn set_swj_clock(&mut self, frequency: u32) -> ResponseStatus;
+
+    fn swj_sequence(&mut self, bits: &[u8], bit_count: usize) -> ResponseStatus;
+}
+
+struct DapImpl {
     led: PC13<Output<PushPull>>,
 }
 
-impl DapEngine<'_> {
+impl DapImplementation for DapImpl {
+    fn pin_io(&mut self, output_select: u8, output: u8, _pin_wait_us: u32) -> u8 {
+        output & output_select
+    }
+
+    fn set_swj_clock(&mut self, _frequency: u32) -> ResponseStatus {
+        ResponseStatus::DAP_OK
+    }
+
+    fn swj_sequence(&mut self, _bits: &[u8], _bit_count: usize) -> ResponseStatus {
+        ResponseStatus::DAP_OK
+    }
+}
+
+
+struct DapEngine<'a, I> {
+    usb: DapUsbDevice<'a, UsbBusType, UsbWaker>,
+    dap: I,
+}
+
+impl<I: DapImplementation> DapEngine<'_, I> {
     async fn reject_command(&mut self) -> Result<(), DapError> {
         self.usb.write_packet(&[Command::DAP_Invalid as u8]).await.map_err(DapError::Usb)
     }
@@ -121,15 +147,65 @@ impl DapEngine<'_> {
         self.usb.write_packet(&response).await.map_err(DapError::Usb)
     }
 
+    pub fn process_dap_info(&mut self, id: u8, response: &mut DapResponse) {
+        match id {
+            0xF0 => { // Capabilities
+                response.write_byte(1); // length
+
+                // SWD + JTAG supported
+                response.write_byte(0x03);
+            }
+            0xFE => { // Packet Count
+                response.write_byte(1); // length
+
+                // Just a single packet
+                response.write_byte(1);
+            }
+            0xFF => { // Packet Size
+                response.write_byte(2); // length
+
+                response.write_short(64);
+            }
+            _ => {}
+        }
+    }
+
     pub async fn process(&mut self) -> Result<(), DapError> {
         let mut buffer = [0; 64];
         let size = self.usb.read_packet(&mut buffer).await?;
-        if let Some(command) = DapCommand::parse(&buffer[..size]) {
-            match command.command() {
-                _ => {
-                    self.reject_command().await?;
+        if let Some(mut command) = DapCommand::parse(&buffer[..size]) {
+            let cmd = command.command();
+            let mut buffer = [0; 64];
+            let mut response = DapResponse::new(cmd, &mut buffer);
+
+            match cmd {
+                Command::DAP_Info => {
+                    let id = command.read_byte();
+                    self.process_dap_info(id, &mut response);
                 }
+                Command::DAP_SWJ_Pins => {
+                    let pin_output = command.read_byte();
+                    let pin_select = command.read_byte();
+                    let pin_wait = command.read_word();
+                    let input = self.dap.pin_io(pin_select, pin_output, pin_wait);
+                    response.write_byte(input);
+                }
+                Command::DAP_SWJ_Clock => {
+                    let frequency = command.read_word();
+                    let status = self.dap.set_swj_clock(frequency);
+                    response.write_byte(status as u8);
+                }
+                Command::DAP_SWJ_Sequence => {
+                    let bit_count = command.read_byte() as usize;
+                    let byte_count = (bit_count + 7) / 8;
+                    let bits = &command[..byte_count];
+                    let status = self.dap.swj_sequence(bits, bit_count);
+                    response.write_byte(status as u8);
+                }
+                _ => response.reject(),
             }
+
+            self.send_response(response).await?;
         }
         Ok(())
     }
@@ -229,9 +305,13 @@ fn main() -> ! {
     //     .device_class(0xff)
     //     .build();
 
+    let dap_impl = DapImpl {
+        led,
+    };
+
     let mut dap = DapEngine {
         usb: DapUsbDevice::new(usb_dev, cmsis_dap, &USB_WAKER),
-        led
+        dap: dap_impl
     };
 
     block_on(async {
