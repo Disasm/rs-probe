@@ -24,6 +24,7 @@ use crate::cmsis_dap_device::DapUsbDevice;
 use core::cell::Cell;
 use core::marker::PhantomData;
 use cortex_m::interrupt::Mutex;
+use core::hint::unreachable_unchecked;
 
 pub trait CustomWaker {
     fn after_arm() {}
@@ -112,6 +113,15 @@ pub trait DapImplementation {
     fn set_swj_clock(&mut self, frequency: u32) -> ResponseStatus;
 
     fn swj_sequence(&mut self, bits: &[u8], bit_count: usize) -> ResponseStatus;
+
+    fn transfer_configure(&mut self, idle_cycles: u8, wait_retry: u16, match_retry: u16) -> ResponseStatus;
+
+    fn set_status_led(&mut self, led_type: DapLedType, led_status: bool);
+}
+
+pub enum DapLedType {
+    Connect,
+    Running,
 }
 
 struct DapImpl {
@@ -129,6 +139,18 @@ impl DapImplementation for DapImpl {
 
     fn swj_sequence(&mut self, _bits: &[u8], _bit_count: usize) -> ResponseStatus {
         ResponseStatus::DAP_OK
+    }
+
+    fn transfer_configure(&mut self, _idle_cycles: u8, _wait_retry: u16, _match_retry: u16) -> ResponseStatus {
+        ResponseStatus::DAP_OK
+    }
+
+    fn set_status_led(&mut self, _led_type: DapLedType, led_status: bool) {
+        if led_status {
+            self.led.set_high().ok();
+        } else {
+            self.led.set_low().ok();
+        }
     }
 }
 
@@ -183,6 +205,24 @@ impl<I: DapImplementation> DapEngine<'_, I> {
                     let id = command.read_byte();
                     self.process_dap_info(id, &mut response);
                 }
+                Command::DAP_HostStatus => {
+                    let led_type = command.read_byte();
+                    let led_status = command.read_byte();
+
+                    // openocd sends a bitmask in led_status instead of a single led status
+                    // Don't check for the valid value
+                    if led_type <= 1 /*&& led_status <= 1*/ {
+                        let led_type = match led_type {
+                            0 => DapLedType::Connect,
+                            1 => DapLedType::Running,
+                            _ => unsafe { unreachable_unchecked() },
+                        };
+                        self.dap.set_status_led(led_type, led_status != 0);
+                        response.write_byte(0x00);
+                    } else {
+                        response.reject();
+                    }
+                }
                 Command::DAP_SWJ_Pins => {
                     let pin_output = command.read_byte();
                     let pin_select = command.read_byte();
@@ -200,6 +240,13 @@ impl<I: DapImplementation> DapEngine<'_, I> {
                     let byte_count = (bit_count + 7) / 8;
                     let bits = &command[..byte_count];
                     let status = self.dap.swj_sequence(bits, bit_count);
+                    response.write_byte(status as u8);
+                }
+                Command::DAP_TransferConfigure => {
+                    let idle_cycles = command.read_byte();
+                    let wait_retry = command.read_short();
+                    let match_retry = command.read_short();
+                    let status = self.dap.transfer_configure(idle_cycles, wait_retry, match_retry);
                     response.write_byte(status as u8);
                 }
                 _ => response.reject(),
