@@ -41,7 +41,22 @@ pub enum Command {
     /// Generate SWD sequence and output on SWDIO or capture input from SWDIO data.
     DAP_SWD_Sequence    = 0x1D,
 
-    // TODO: SWO Commands
+    // SWO Commands
+    /// Set SWO transport mode.
+    DAP_SWO_Transport   = 0x17,
+    /// Set SWO capture mode.
+    DAP_SWO_Mode        = 0x18,
+    ///Set SWO baudrate.
+    DAP_SWO_Baudrate    = 0x19,
+    /// Control SWO trace data capture.
+    DAP_SWO_Control     = 0x1A,
+    /// Read SWO trace status.
+    DAP_SWO_Status      = 0x1B,
+    /// Read SWO trace extended status.
+    DAP_SWO_ExtendedStatus = 0x1E,
+    /// Read SWO trace data.
+    DAP_SWO_Data        = 0x1C,
+
     // TODO: JTAG Commands
     // TODO: Transfer Commands
     // TODO: Atomic Commands
@@ -120,6 +135,13 @@ pub fn request_length(command: Command, request: &[u8]) -> Option<NonZeroUsize> 
                 return None;
             }
         },
+        DAP_SWO_Transport => 2,
+        DAP_SWO_Mode => 2,
+        DAP_SWO_Baudrate => 5,
+        DAP_SWO_Control => 2,
+        DAP_SWO_Status => 1,
+        DAP_SWO_ExtendedStatus => 2,
+        DAP_SWO_Data => 3,
         _ => return None,
     };
     Some(unsafe { NonZeroUsize::new_unchecked(len) })
