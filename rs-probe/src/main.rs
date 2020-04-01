@@ -74,23 +74,23 @@ impl CustomWaker for UsbWaker {
             NVIC::unmask(Interrupt::USB_LP_CAN_RX0);
         }
     }
-
-    fn before_wake() {
-        // avoid continuously re-entering this interrupt handler
-        NVIC::mask(Interrupt::USB_HP_CAN_TX);
-        NVIC::mask(Interrupt::USB_LP_CAN_RX0);
-    }
 }
 
 static USB_WAKER: SharedWaker<UsbWaker> = SharedWaker::new();
 
 #[interrupt]
 fn USB_HP_CAN_TX() {
+    // avoid continuously re-entering this interrupt handler
+    NVIC::mask(Interrupt::USB_HP_CAN_TX);
+
     USB_WAKER.wake();
 }
 
 #[interrupt]
 fn USB_LP_CAN_RX0() {
+    // avoid continuously re-entering this interrupt handler
+    NVIC::mask(Interrupt::USB_LP_CAN_RX0);
+
     USB_WAKER.wake();
 }
 
