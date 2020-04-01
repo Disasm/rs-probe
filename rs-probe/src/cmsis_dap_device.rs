@@ -1,6 +1,6 @@
 use usb_device::bus::UsbBus;
 use usb_device::device::UsbDevice;
-use crate::cmsis_dap_class::CmsisDapV2;
+use crate::cmsis_dap_class::CmsisDapV1;
 use usb_device::UsbError;
 use core::task::{Context, Poll};
 use core::future::Future;
@@ -10,12 +10,12 @@ use crate::{SharedWaker, CustomWaker};
 
 pub struct DapUsbDevice<'a, B: UsbBus, W> {
     device: UsbDevice<'a, B>,
-    dap: CmsisDapV2<'a, B>,
+    dap: CmsisDapV1<'a, B>,
     waker: &'a SharedWaker<W>,
 }
 
 impl<'a, B: UsbBus, W: CustomWaker> DapUsbDevice<'a, B, W> {
-    pub fn new(device: UsbDevice<'a, B>, dap: CmsisDapV2<'a, B>, waker: &'a SharedWaker<W>) -> Self {
+    pub fn new(device: UsbDevice<'a, B>, dap: CmsisDapV1<'a, B>, waker: &'a SharedWaker<W>) -> Self {
         Self {
             device,
             dap,

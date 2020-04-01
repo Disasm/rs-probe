@@ -13,7 +13,7 @@ use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use stm32f1xx_hal::{prelude::*, stm32, stm32::{interrupt, Interrupt}};
 use stm32f1xx_hal::gpio::{Output, PushPull, gpioc::PC13};
 use usb_device::prelude::*;
-use crate::cmsis_dap_class::CmsisDapV2;
+use crate::cmsis_dap_class::CmsisDapV1;
 use cmsis_dap::{DapCommand, Command, DapResponse};
 use core::future::Future;
 use core::pin::Pin;
@@ -214,14 +214,20 @@ fn main() -> ! {
     };
     let usb_bus = UsbBus::new(usb);
 
-    let cmsis_dap = CmsisDapV2::new(&usb_bus);
+    let cmsis_dap = CmsisDapV1::new(&usb_bus);
 
-    let usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0xc251, 0xf000))
+    let usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0xc251, 0xf001))
         .manufacturer("KEIL - Tools By ARM")
-        .product("CMSIS-DAP v2")
+        .product("LPC-Link-II CMSIS-DAP")
         .serial_number("TEST")
-        .device_class(0xff)
         .build();
+
+    // let usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0xc251, 0xf000))
+    //     .manufacturer("KEIL - Tools By ARM")
+    //     .product("CMSIS-DAP v2")
+    //     .serial_number("TEST")
+    //     .device_class(0xff)
+    //     .build();
 
     let mut dap = DapEngine {
         usb: DapUsbDevice::new(usb_dev, cmsis_dap, &USB_WAKER),
