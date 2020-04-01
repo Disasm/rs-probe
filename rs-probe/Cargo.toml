@@ -11,3 +11,4 @@ stm32f1xx-hal = { version = "0.5.3", features = ["stm32f103", "stm32-usbd", "rt"
 panic-semihosting = "0.5.3"
 usb-device = "0.2.5"
 embedded-hal = "0.2.3"
+cmsis-dap = { path = "../cmsis-dap" }
