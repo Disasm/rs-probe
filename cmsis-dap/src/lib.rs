@@ -65,7 +65,16 @@ pub enum Command {
     /// Read JTAG IDCODE.
     DAP_JTAG_IDCODE     = 0x16,
 
-    // TODO: Transfer Commands
+    // Transfer Commands
+    /// Configure Transfers.
+    DAP_TransferConfigure = 0x04,
+    /// Read/write single and multiple registers.
+    DAP_Transfer        = 0x05,
+    /// Read/Write a block of data from/to a single register.
+    DAP_TransferBlock   = 0x06,
+    /// Abort current Transfer.
+    DAP_TransferAbort   = 0x07,
+
     // TODO: Atomic Commands
 
     // DAP Vendor Command IDs
@@ -178,6 +187,43 @@ pub fn request_length(command: Command, request: &[u8]) -> Option<NonZeroUsize> 
             }
         }
         DAP_JTAG_IDCODE => 2,
+
+        DAP_TransferConfigure => 6,
+        DAP_Transfer => {
+            if request.len() >= 3 {
+                let transfer_count = request[2] as usize;
+                let mut offset = 3;
+                for _ in 0..transfer_count {
+                    if offset >= request.len() {
+                        return None;
+                    }
+                    let req = request[offset];
+                    offset += 1;
+
+                    if (req & 0b10 == 0) || (req & 0b00110000 != 0) {
+                        offset += 4;
+                    }
+                }
+                offset
+            } else {
+                return None;
+            }
+        },
+        DAP_TransferBlock => {
+            if request.len() >= 5 {
+                let transfer_count = u16::from_le_bytes(request[2..4].try_into().unwrap());
+                let req = request[5];
+
+                if req & 0b10 == 0 {
+                    5 + 4 * (transfer_count as usize)
+                } else {
+                    5
+                }
+            } else {
+                return None;
+            }
+        },
+        DAP_TransferAbort => 1,
 
         _ => return None,
     };
