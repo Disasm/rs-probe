@@ -147,9 +147,9 @@ impl DapImplementation for DapImpl {
 
     fn set_status_led(&mut self, _led_type: DapLedType, led_status: bool) {
         if led_status {
-            self.led.set_high().ok();
-        } else {
             self.led.set_low().ok();
+        } else {
+            self.led.set_high().ok();
         }
     }
 }
