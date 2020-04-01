@@ -113,8 +113,8 @@ struct DapEngine<'a> {
 }
 
 impl DapEngine<'_> {
-    async fn reject_command(&mut self, command: Command) -> Result<(), DapError> {
-        self.usb.write_packet(&[command as u8]).await.map_err(DapError::Usb)
+    async fn reject_command(&mut self) -> Result<(), DapError> {
+        self.usb.write_packet(&[Command::DAP_Invalid as u8]).await.map_err(DapError::Usb)
     }
 
     async fn send_response(&mut self, response: DapResponse<'_>) -> Result<(), DapError> {
@@ -126,8 +126,8 @@ impl DapEngine<'_> {
         let size = self.usb.read_packet(&mut buffer).await?;
         if let Some(command) = DapCommand::parse(&buffer[..size]) {
             match command.command() {
-                other => {
-                    self.reject_command(other).await?;
+                _ => {
+                    self.reject_command().await?;
                 }
             }
         }
