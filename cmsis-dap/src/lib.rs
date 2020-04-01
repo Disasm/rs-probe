@@ -57,7 +57,14 @@ pub enum Command {
     /// Read SWO trace data.
     DAP_SWO_Data        = 0x1C,
 
-    // TODO: JTAG Commands
+    // JTAG Commands
+    /// Generate JTAG sequence TMS, TDI and capture TDO.
+    DAP_JTAG_Sequence   = 0x14,
+    /// Configure JTAG Chain.
+    DAP_JTAG_Configure  = 0x15,
+    /// Read JTAG IDCODE.
+    DAP_JTAG_IDCODE     = 0x16,
+
     // TODO: Transfer Commands
     // TODO: Atomic Commands
 
@@ -127,9 +134,6 @@ pub fn request_length(command: Command, request: &[u8]) -> Option<NonZeroUsize> 
                         offset += (cycle_count + 7) / 8;
                     }
                 }
-                if offset > request.len() {
-                    return None;
-                }
                 offset
             } else {
                 return None;
@@ -142,8 +146,45 @@ pub fn request_length(command: Command, request: &[u8]) -> Option<NonZeroUsize> 
         DAP_SWO_Status => 1,
         DAP_SWO_ExtendedStatus => 2,
         DAP_SWO_Data => 3,
+
+        DAP_JTAG_Sequence => {
+            if request.len() >= 2 {
+                let sequence_count = request[1];
+                let mut offset = 2;
+                for _ in 0..sequence_count {
+                    if offset >= request.len() {
+                        return None;
+                    }
+                    let sequence_info = request[offset];
+                    offset += 1;
+
+                    let cycle_count = match sequence_info & 0x2f {
+                        0 => 64,
+                        x => x as usize,
+                    };
+                    offset += (cycle_count + 7) / 8;
+                }
+                offset
+            } else {
+                return None;
+            }
+        }
+        DAP_JTAG_Configure => {
+            if request.len() >= 2 {
+                let count = request[1] as usize;
+                2 + count
+            } else {
+                return None;
+            }
+        }
+        DAP_JTAG_IDCODE => 2,
+
         _ => return None,
     };
+
+    if len > request.len() {
+        return None;
+    }
     Some(unsafe { NonZeroUsize::new_unchecked(len) })
 }
 
