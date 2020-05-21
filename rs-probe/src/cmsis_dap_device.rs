@@ -5,17 +5,17 @@ use usb_device::UsbError;
 use core::task::{Context, Poll};
 use core::future::Future;
 use core::pin::Pin;
-use crate::{SharedWaker, CustomWaker};
+use crate::SharedWaker;
 
 
-pub struct DapUsbDevice<'a, B: UsbBus, W> {
+pub struct DapUsbDevice<'a, B: UsbBus> {
     device: UsbDevice<'a, B>,
     dap: CmsisDapV1<'a, B>,
-    waker: &'a SharedWaker<W>,
+    waker: &'a SharedWaker,
 }
 
-impl<'a, B: UsbBus, W: CustomWaker> DapUsbDevice<'a, B, W> {
-    pub fn new(device: UsbDevice<'a, B>, dap: CmsisDapV1<'a, B>, waker: &'a SharedWaker<W>) -> Self {
+impl<'a, B: UsbBus> DapUsbDevice<'a, B> {
+    pub fn new(device: UsbDevice<'a, B>, dap: CmsisDapV1<'a, B>, waker: &'a SharedWaker) -> Self {
         Self {
             device,
             dap,
@@ -53,7 +53,7 @@ impl<'a, B: UsbBus, W: CustomWaker> DapUsbDevice<'a, B, W> {
 }
 
 
-impl<B: UsbBus, W: CustomWaker> Future for DapUsbDevice<'_, B, W> {
+impl<B: UsbBus> Future for DapUsbDevice<'_, B> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

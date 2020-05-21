@@ -22,43 +22,43 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::peripheral::NVIC;
 use crate::cmsis_dap_device::DapUsbDevice;
 use core::cell::Cell;
-use core::marker::PhantomData;
 use cortex_m::interrupt::Mutex;
 use core::hint::unreachable_unchecked;
 
-pub trait CustomWaker {
-    fn after_arm() {}
-
-    fn before_wake() {}
+pub struct SharedWakerVTable {
+    after_arm: Option<fn()>,
+    before_wake: Option<fn()>,
 }
 
-pub struct SharedWaker<T> {
+pub struct SharedWaker {
     inner: Mutex<Cell<Option<Waker>>>,
-    _marker: PhantomData<T>,
+    vtable: SharedWakerVTable,
 }
 
-impl<T> SharedWaker<T> {
-    pub const fn new() -> Self {
+impl SharedWaker {
+    pub const fn new(vtable: SharedWakerVTable) -> Self {
         Self {
             inner: Mutex::new(Cell::new(None)),
-            _marker: PhantomData
+            vtable,
         }
     }
-}
 
-impl<T: CustomWaker> SharedWaker<T> {
     pub fn arm(&self, waker: Waker) {
         cortex_m::interrupt::free(|cs| {
             self.inner.borrow(cs).set(Some(waker));
         });
 
-        T::after_arm();
+        if let Some(f) = self.vtable.after_arm {
+            f();
+        }
     }
 
     pub fn wake(&self) {
         cortex_m::interrupt::free(|cs| {
             if let Some(waker) = self.inner.borrow(cs).take() {
-                T::before_wake();
+                if let Some(f) = self.vtable.before_wake {
+                    f();
+                }
 
                 waker.wake();
             }
@@ -66,18 +66,15 @@ impl<T: CustomWaker> SharedWaker<T> {
     }
 }
 
-pub struct UsbWaker;
-
-impl CustomWaker for UsbWaker {
-    fn after_arm() {
+static USB_WAKER: SharedWaker = SharedWaker::new(SharedWakerVTable {
+    after_arm: Some(|| {
         unsafe {
             NVIC::unmask(Interrupt::USB_HP_CAN_TX);
             NVIC::unmask(Interrupt::USB_LP_CAN_RX0);
         }
-    }
-}
-
-static USB_WAKER: SharedWaker<UsbWaker> = SharedWaker::new();
+    }),
+    before_wake: None
+});
 
 #[interrupt]
 fn USB_HP_CAN_TX() {
@@ -156,7 +153,7 @@ impl DapImplementation for DapImpl {
 
 
 struct DapEngine<'a, I> {
-    usb: DapUsbDevice<'a, UsbBusType, UsbWaker>,
+    usb: DapUsbDevice<'a, UsbBusType>,
     dap: I,
 }
 
