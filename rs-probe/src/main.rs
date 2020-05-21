@@ -126,14 +126,6 @@ struct DapEngine<'a, I, C> {
 }
 
 impl<I: DapImplementation, C: CmsisDapClass<UsbBusType>> DapEngine<'_, I, C> {
-    async fn reject_command(&mut self) -> Result<(), DapError> {
-        self.usb.write_packet(&[Command::DAP_Invalid as u8]).await.map_err(DapError::Usb)
-    }
-
-    async fn send_response(&mut self, response: DapResponse<'_>) -> Result<(), DapError> {
-        self.usb.write_packet(&response).await.map_err(DapError::Usb)
-    }
-
     pub fn process_dap_info(&mut self, id: u8, response: &mut DapResponse) {
         match id {
             0xF0 => { // Capabilities
@@ -212,7 +204,8 @@ impl<I: DapImplementation, C: CmsisDapClass<UsbBusType>> DapEngine<'_, I, C> {
                 _ => response.reject(),
             }
 
-            self.send_response(response).await?;
+            // Send response
+            self.usb.write_packet(&response).await?;
         }
         Ok(())
     }
