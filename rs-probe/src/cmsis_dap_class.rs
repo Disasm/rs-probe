@@ -2,6 +2,21 @@ use usb_device::class_prelude::*;
 use usb_device::Result;
 use usb_device::control::{RequestType, Recipient};
 
+pub enum CmsisDapVersion {
+    V1,
+    V2
+}
+
+pub trait CmsisDapClass<B: UsbBus>: UsbClass<B> + Unpin {
+    const VERSION: CmsisDapVersion;
+
+    fn read_packet(&mut self, buffer: &mut [u8]) -> Result<usize>;
+
+    fn write_packet(&mut self, data: &[u8]) -> Result<()>;
+
+    fn max_packet_size(&self) -> usize;
+}
+
 const INTERFACE_CLASS_HID: u8 = 0x03;
 
 #[derive(Debug, Clone, Copy)]
@@ -45,21 +60,6 @@ impl<B: UsbBus> CmsisDapV1<'_, B> {
             read_ep: alloc.alloc(Some(EndpointAddress::from(0x01)), EndpointType::Interrupt, 64, 1).expect("alloc_ep failed"),
             write_ep: alloc.alloc(Some(EndpointAddress::from(0x81)), EndpointType::Interrupt, 64, 1).expect("alloc_ep failed"),
         }
-    }
-
-    pub fn read_packet(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        let len = self.read_ep.read(buffer)?;
-        if len == 0 {
-            return Err(UsbError::WouldBlock);
-        }
-        Ok(len)
-    }
-
-    pub fn write_packet(&mut self, data: &[u8]) -> Result<()> {
-        if data.len() > self.write_ep.max_packet_size() as usize {
-            return Err(UsbError::BufferOverflow);
-        }
-        self.write_ep.write(&data).map(|_| ())
     }
 }
 
@@ -109,6 +109,29 @@ impl<B: UsbBus> UsbClass<B> for CmsisDapV1<'_, B> {
     }
 }
 
+impl<B: UsbBus> CmsisDapClass<B> for CmsisDapV1<'_, B> {
+    const VERSION: CmsisDapVersion = CmsisDapVersion::V1;
+
+    fn read_packet(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        let len = self.read_ep.read(buffer)?;
+        if len == 0 {
+            return Err(UsbError::WouldBlock);
+        }
+        Ok(len)
+    }
+
+    fn write_packet(&mut self, data: &[u8]) -> Result<()> {
+        if data.len() > self.write_ep.max_packet_size() as usize {
+            return Err(UsbError::BufferOverflow);
+        }
+        self.write_ep.write(&data).map(|_| ())
+    }
+
+    fn max_packet_size(&self) -> usize {
+        self.write_ep.max_packet_size() as usize
+    }
+}
+
 
 pub struct CmsisDapV2<'a, B: UsbBus> {
     interface: InterfaceNumber,
@@ -126,21 +149,6 @@ impl<B: UsbBus> CmsisDapV2<'_, B> {
             trace_ep: alloc.alloc(Some(EndpointAddress::from(0x82)), EndpointType::Bulk, 64, 0).expect("alloc_ep failed"),
         }
     }
-
-    pub fn read_packet(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        let len = self.read_ep.read(buffer)?;
-        if len == 0 {
-            return Err(UsbError::WouldBlock);
-        }
-        Ok(len)
-    }
-
-    pub fn write_packet(&mut self, data: &[u8]) -> Result<()> {
-        if data.len() > self.write_ep.max_packet_size() as usize {
-            return Err(UsbError::BufferOverflow);
-        }
-        self.write_ep.write(&data).map(|_| ())
-    }
 }
 
 impl<B: UsbBus> UsbClass<B> for CmsisDapV2<'_, B> {
@@ -155,5 +163,28 @@ impl<B: UsbBus> UsbClass<B> for CmsisDapV2<'_, B> {
     }
 
     fn reset(&mut self) {
+    }
+}
+
+impl<B: UsbBus> CmsisDapClass<B> for CmsisDapV2<'_, B> {
+    const VERSION: CmsisDapVersion = CmsisDapVersion::V2;
+
+    fn read_packet(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        let len = self.read_ep.read(buffer)?;
+        if len == 0 {
+            return Err(UsbError::WouldBlock);
+        }
+        Ok(len)
+    }
+
+    fn write_packet(&mut self, data: &[u8]) -> Result<()> {
+        if data.len() > self.write_ep.max_packet_size() as usize {
+            return Err(UsbError::BufferOverflow);
+        }
+        self.write_ep.write(&data).map(|_| ())
+    }
+
+    fn max_packet_size(&self) -> usize {
+        self.write_ep.max_packet_size() as usize
     }
 }

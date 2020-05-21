@@ -1,6 +1,6 @@
 use usb_device::bus::UsbBus;
 use usb_device::device::UsbDevice;
-use crate::cmsis_dap_class::CmsisDapV1;
+use crate::cmsis_dap_class::CmsisDapClass;
 use usb_device::UsbError;
 use core::task::{Context, Poll};
 use core::future::Future;
@@ -8,14 +8,14 @@ use core::pin::Pin;
 use crate::SharedWaker;
 
 
-pub struct DapUsbDevice<'a, B: UsbBus> {
+pub struct DapUsbDevice<'a, B: UsbBus, C> {
     device: UsbDevice<'a, B>,
-    dap: CmsisDapV1<'a, B>,
+    dap: C,
     waker: &'a SharedWaker,
 }
 
-impl<'a, B: UsbBus> DapUsbDevice<'a, B> {
-    pub fn new(device: UsbDevice<'a, B>, dap: CmsisDapV1<'a, B>, waker: &'a SharedWaker) -> Self {
+impl<'a, B: UsbBus, C: CmsisDapClass<B>> DapUsbDevice<'a, B, C> {
+    pub fn new(device: UsbDevice<'a, B>, dap: C, waker: &'a SharedWaker) -> Self {
         Self {
             device,
             dap,
@@ -53,7 +53,7 @@ impl<'a, B: UsbBus> DapUsbDevice<'a, B> {
 }
 
 
-impl<B: UsbBus> Future for DapUsbDevice<'_, B> {
+impl<B: UsbBus, C: CmsisDapClass<B>> Future for DapUsbDevice<'_, B, C> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

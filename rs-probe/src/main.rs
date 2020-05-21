@@ -13,7 +13,7 @@ use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use stm32f1xx_hal::{prelude::*, stm32, stm32::{interrupt, Interrupt}};
 use stm32f1xx_hal::gpio::{Output, PushPull, gpioc::PC13};
 use usb_device::prelude::*;
-use crate::cmsis_dap_class::CmsisDapV1;
+use crate::cmsis_dap_class::{CmsisDapV1, CmsisDapClass};
 use cmsis_dap::{DapCommand, Command, DapResponse, ResponseStatus};
 use core::future::Future;
 use core::pin::Pin;
@@ -152,12 +152,12 @@ impl DapImplementation for DapImpl {
 }
 
 
-struct DapEngine<'a, I> {
-    usb: DapUsbDevice<'a, UsbBusType>,
+struct DapEngine<'a, I, C> {
+    usb: DapUsbDevice<'a, UsbBusType, C>,
     dap: I,
 }
 
-impl<I: DapImplementation> DapEngine<'_, I> {
+impl<I: DapImplementation, C: CmsisDapClass<UsbBusType>> DapEngine<'_, I, C> {
     async fn reject_command(&mut self) -> Result<(), DapError> {
         self.usb.write_packet(&[Command::DAP_Invalid as u8]).await.map_err(DapError::Usb)
     }
