@@ -18,8 +18,8 @@ use crate::cmsis_dap_class::{CmsisDapV1, CmsisDapClass};
 use cmsis_dap::{DapCommand, Command, DapResponse, ResponseStatus};
 use cortex_m::peripheral::NVIC;
 use crate::cmsis_dap_device::DapUsbDevice;
-use core::hint::unreachable_unchecked;
 use crate::executor::{SharedWaker, SharedWakerVTable, block_on};
+use core::convert::TryFrom;
 
 
 static USB_WAKER: SharedWaker = SharedWaker::new(SharedWakerVTable {
@@ -75,6 +75,18 @@ pub trait DapImplementation {
 pub enum DapLedType {
     Connect,
     Running,
+}
+
+impl TryFrom<u8> for DapLedType {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(DapLedType::Connect),
+            1 => Ok(DapLedType::Running),
+            _ => Err(()),
+        }
+    }
 }
 
 struct DapImpl {
@@ -162,14 +174,9 @@ impl<I: DapImplementation, C: CmsisDapClass<UsbBusType>> DapEngine<'_, I, C> {
                     let led_type = command.read_byte();
                     let led_status = command.read_byte();
 
-                    // openocd sends a bitmask in led_status instead of a single led status
-                    // Don't check for the valid value
-                    if led_type <= 1 /*&& led_status <= 1*/ {
-                        let led_type = match led_type {
-                            0 => DapLedType::Connect,
-                            1 => DapLedType::Running,
-                            _ => unsafe { unreachable_unchecked() },
-                        };
+                    if let Ok(led_type) = DapLedType::try_from(led_type) {
+                        // openocd sends a bitmask in led_status instead of a single led status
+                        // Don't check for the valid value
                         self.dap.set_status_led(led_type, led_status != 0);
                         response.write_byte(0x00);
                     } else {
